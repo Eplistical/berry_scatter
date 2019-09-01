@@ -18,7 +18,7 @@ function exact_2d(r, k, init_s, fID)
     M = 256; % 384; 
 
     dt = 0.1;
-    Nstep = 7000; 
+    Nstep = 1000; 
     tgraph = 250;
     mass = 1000;
 
@@ -27,7 +27,7 @@ function exact_2d(r, k, init_s, fID)
     enable_abc = true;
 
     % potential energy 
-    debug_flat_potential = true;
+    debug_flat_potential = false;
     if debug_flat_potential == true
         fprintf('# flat potential, for debug\n');
         debug_flat_potential = true;

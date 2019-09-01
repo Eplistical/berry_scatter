@@ -13,7 +13,8 @@
 #include "misc/matrixop.hpp"
 #include "boost/program_options.hpp"
 
-#include "2d_flat_potential.hpp"
+//#include "2d_flat_potential.hpp"
+#include "2d_conner_potential.hpp"
 
 using namespace std;
 namespace po = boost::program_options;
@@ -219,10 +220,12 @@ void exact() {
     double n0d = 0.0, n1d = 0.0;
     double n0ad = 0.0, n1ad = 0.0;
     // propagate WF
+    ioer::info(5);
     for (int istep = 0; istep < Nstep; ++istep) {
         // exp(-iVdt/2)
         auto psi_k0 = V00 * psi0 + V01 * psi1;
         auto psi_k1 = V10 * psi0 + V11 * psi1;
+    ioer::info(5.5);
         // exp(-iTdt)
         psi_k0 = misc::fftn(psi_k0, dim);
         psi_k1 = misc::fftn(psi_k1, dim);
@@ -264,7 +267,6 @@ void exact() {
         }
         // analysis & output
         if (istep % output_step == 0) {
-            ioer::STDOUT.set_precision(10);
             // header
             if (istep == 0) {
                 output_potential_param();
