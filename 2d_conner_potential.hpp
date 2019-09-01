@@ -19,7 +19,7 @@ namespace {
     using std::pow;
 
     double param_A = 0.0;
-    double param_B = 5.0;
+    double param_B = 4.0;
     double param_C = 0.1;
     double param_D = 3.0;
     double param_E = 4.0;

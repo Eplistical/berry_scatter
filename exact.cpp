@@ -220,12 +220,10 @@ void exact() {
     double n0d = 0.0, n1d = 0.0;
     double n0ad = 0.0, n1ad = 0.0;
     // propagate WF
-    ioer::info(5);
     for (int istep = 0; istep < Nstep; ++istep) {
         // exp(-iVdt/2)
-        auto psi_k0 = V00 * psi0 + V01 * psi1;
-        auto psi_k1 = V10 * psi0 + V11 * psi1;
-    ioer::info(5.5);
+        vector< complex<double> > psi_k0 = V00 * psi0 + V01 * psi1;
+        vector< complex<double> > psi_k1 = V10 * psi0 + V11 * psi1;
         // exp(-iTdt)
         psi_k0 = misc::fftn(psi_k0, dim);
         psi_k1 = misc::fftn(psi_k1, dim);
