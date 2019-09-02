@@ -15,15 +15,14 @@ function exact_2d(r, k, init_s, fID)
 
     N = 2;
     L = 24; % 32;
-    M = 256; % 384; 
+    M = 192; % 384; 
 
     dt = 0.2;
-    Nstep = 10000; 
-    tgraph = 250;
-    mass = 1000;
+    Nstep = 50000; 
+    output_step = 500;
+    mass = 1000.0;
 
     enable_plot = false;
-    enable_adiab = false;
     enable_abc = true;
 
     % potential energy 
@@ -37,10 +36,15 @@ function exact_2d(r, k, init_s, fID)
         cal_H12 = @(x,y) 0.02 * sin(0.5 * pi * (erf(3 * x) + 1)) * exp(1i * param_W * y);
     else
         fprintf('# conner potential\n');
-        param_C = 0.1;
-        param_W = 1.0;
+        param_C = 0.15;
+        param_W = 0.0;
+        %{
         cal_H11 = @(x,y) tanh(x-5) - tanh(x+5) + tanh(y) + 3; % + 0.1 * 5^2 / ((x-y)^2 + 5^2);
         cal_H22 = @(x,y) tanh(y-5) - tanh(y+5) + tanh(x) + 3; % + 0.1 * 5^2 / ((x-y)^2 + 5^2);
+        cal_H12 = @(x,y) param_C * exp(1i * param_W * sqrt(x^2 + y^2));
+        %}
+        cal_H11 = @(x,y) tanh(x-8) - tanh(x+2) + tanh(y-3) + 3; % + 0.1 * 5^2 / ((x-y)^2 + 5^2);
+        cal_H22 = @(x,y) tanh(y-8) - tanh(y+2) + tanh(x-3) + 3; % + 0.1 * 5^2 / ((x-y)^2 + 5^2);
         cal_H12 = @(x,y) param_C * exp(1i * param_W * sqrt(x^2 + y^2));
     end
     % grids
@@ -122,7 +126,7 @@ function exact_2d(r, k, init_s, fID)
     psiad0(:,:,1) = c1 * exp(1i*(kxI*meshx + kyI*meshy)) .* exp(-(meshx-xI).^2/sigmax^2 - (meshy-yI).^2/sigmay^2);
     psiad0(:,:,2) = c2 * exp(1i*(kxI*meshx + kyI*meshy)) .* exp(-(meshx-xI).^2/sigmax^2 - (meshy-yI).^2/sigmay^2);
     psiad0 = psiad0 / sqrt(sum(sum(sum(abs(psiad0).^2))));
-    % convert to diab
+    % convert to diab for propagation
     psi0 = zeros(M,M,N);
     psi0(:,:,1) = evts(:,:,1,1) .*  psiad0(:,:,1) + evts(:,:,1,2) .* psiad0(:,:,2);
     psi0(:,:,2) = evts(:,:,2,1) .*  psiad0(:,:,1) + evts(:,:,2,2) .* psiad0(:,:,2);
@@ -137,7 +141,7 @@ function exact_2d(r, k, init_s, fID)
     ana_step = 0;
     psi = psi0;
     for t=0:Nstep-1
-        % exp(-iVdt/2) * |Psi> in diab repr
+        % exp(-iVdt/2) * |Psi>
         psi_k(:,:,1) = VU(:,:,1,1).*psi(:,:,1) + VU(:,:,1,2).*psi(:,:,2);
         psi_k(:,:,2) = VU(:,:,2,1).*psi(:,:,1) + VU(:,:,2,2).*psi(:,:,2);
         % exp(-iTdt) * psi
@@ -148,7 +152,6 @@ function exact_2d(r, k, init_s, fID)
         psi_k(:,:,2) = ifft2(psi_k(:,:,2));
         psi(:,:,1) = VU(:,:,1,1).*psi_k(:,:,1) + VU(:,:,1,2).*psi_k(:,:,2);
         psi(:,:,2) = VU(:,:,2,1).*psi_k(:,:,1) + VU(:,:,2,2).*psi_k(:,:,2);
-
         % abosrbing boundary condition, notice energy conservation will break if abc is enabled
         if enable_abc == true
             % reduce x boundary 
@@ -178,21 +181,18 @@ function exact_2d(r, k, init_s, fID)
             y_absorb_accu2 = y_absorb_accu2 + n2_before_reduce - n2_after_reduce;
         end
         % analysis & report
-        if mod(t,tgraph) == 0
+        if mod(t,output_step) == 0
             % header
             if t == 0
-                if enable_adiab == true
-                    fprintf(fID, '# EXACT ADIAB\n');
-                else
-                    fprintf(fID, '# EXACT DIAB\n');
-                end
+                fprintf(fID, '# EXACT DIAB\n');
                 fprintf(fID, '# xI = %8.4f yI = %8.4f kxI = %8.4f kyI = %8.4f sigmax = %8.4f sigmay = %8.4f W = %8.4f init_s = %8.4f c1 = %8.4f c2 = %8.4f \n', ...
                                     xI, yI, kxI, kyI, sigmax, sigmay, param_W, init_s, c1, c2);
-                fprintf(fID, '# L = %8.4f M = %8d dt = %8.4f Nstep = %8d tgraph = %8d\n', ...
-                                    L, M, dt, Nstep, tgraph);
-                if enable_adiab == true
-                    fprintf(fID, '#%16s%16s%16s%16s%16s%16s\n', ...
-                                    't', 'n1ad', 'n2ad', 'KE', 'PE', 'Etot');
+                fprintf(fID, '# L = %8.4f M = %8d dt = %8.4f Nstep = %8d output_step = %8d\n', ...
+                                    L, M, dt, Nstep, output_step);
+                if enable_abc == true
+                    fprintf(fID, '#%16s%16s%16s%16s%16s%16s%16s%16s%16s%16s%16s\n', ...
+                                    't', 'n1d', 'n2d', 'KE', 'PE', 'Etot', ...
+                                    'x_absorb1', 'x_absorb2', 'y_absorb1', 'y_aborb2', 'tot_absorb');
                 else
                     fprintf(fID, '#%16s%16s%16s%16s%16s%16s\n', ...
                                     't', 'n1d', 'n2d', 'KE', 'PE', 'Etot');
@@ -202,100 +202,53 @@ function exact_2d(r, k, init_s, fID)
             psi_k(:,:,1) = fftshift(fft2(psi(:,:,1)));
             psi_k(:,:,2) = fftshift(fft2(psi(:,:,2)));
             psi_k = psi_k / sqrt(sum(sum(sum(abs(psi_k).^2))));
+            nd1 = sum(sum(abs(psi(:,:,1)).^2));
+            nd2 = sum(sum(abs(psi(:,:,2)).^2));
             KE = sum(sum((abs(psi_k(:,:,1)).^2 + abs(psi_k(:,:,2)).^2) .* (meshkx.^2 + meshky.^2) / 2 / mass));
             PE = sum(sum( conj(psi(:,:,1)) .* Hs(:,:,1,1) .* psi(:,:,1) + conj(psi(:,:,1)) .* Hs(:,:,1,2) .* psi(:,:,2) + conj(psi(:,:,2)) .* Hs(:,:,2,1) .* psi(:,:,1) + conj(psi(:,:,2)) .* Hs(:,:,2,2) .* psi(:,:,2) ));
-
-            if enable_adiab == true
-                % in adiab
-                psiad(:,:,1) = conj(evts(:,:,1,1)).*psi(:,:,1)+conj(evts(:,:,2,1)).*psi(:,:,2);
-                psiad(:,:,2) = conj(evts(:,:,1,2)).*psi(:,:,1)+conj(evts(:,:,2,2)).*psi(:,:,2);
-
-                psiad = psiad / sqrt(sum(sum(sum(abs(psiad).^2))));
-                psiad_k(:,:,1) = fftshift(fft2(psiad(:,:,1)));
-                psiad_k(:,:,2) = fftshift(fft2(psiad(:,:,2)));
-                psiad_k = psiad_k / sqrt(sum(sum(sum(abs(psiad_k).^2))));
-
-                nad1 = sum(sum(abs(psiad(:,:,1)).^2));
-                nad2 = sum(sum(abs(psiad(:,:,2)).^2));
-
-                % define trans: y<x, refl: y>=x
-                nad1r = 0.0;
-                nad1t = 0.0;
-                nad2r = 0.0;
-                nad2t = 0.0;
-                for j=1:M
-                    for k=1:M
-                        if k >= j
-                            nad1r = nad1r + abs(psiad(k,j,1))^2;
-                            nad2r = nad2r + abs(psiad(k,j,2))^2;
-                        else
-                            nad1t = nad1t + abs(psiad(k,j,1))^2;
-                            nad2t = nad2t + abs(psiad(k,j,2))^2;
-                        end
-                    end
-                end
-                fprintf(fID, '#%16.10f%16.10f%16.10f%16.10f%16.10f%16.10f%16.10f%16.10f%16.10f%16.10f\n', ...
+            if enable_abc == true
+                fprintf(fID, '#%16.10f%16.10f%16.10f%16.10f%16.10f%16.10f%16.10f%16.10f%16.10f%16.10f%16.10f\n', ...
                             t*dt, ...
-                            nad1, nad2, ...
+                            nd1, nd2, ...
                             KE, PE, KE+PE, ...
-                            nad1r, nad1t, nad2r, nad2t ...
+                            x_absorb_accu1, x_absorb_accu2, ...
+                            y_absorb_accu1, y_absorb_accu2, ...
+                            x_absorb_accu1+x_absorb_accu2+y_absorb_accu1+y_absorb_accu2...
                             );
             else
-                nd1 = sum(sum(abs(psi(:,:,1)).^2));
-                nd2 = sum(sum(abs(psi(:,:,2)).^2));
-                if enable_abc == true
-                    fprintf(fID, '#%16.10f%16.10f%16.10f%16.10f%16.10f%16.10f%16.10f%16.10f%16.10f%16.10f%16.10f\n', ...
-                                t*dt, ...
-                                nd1, nd2, ...
-                                KE, PE, KE+PE, ...
-                                x_absorb_accu1, x_absorb_accu2, ...
-                                y_absorb_accu1, y_absorb_accu2, ...
-                                x_absorb_accu1+x_absorb_accu2+y_absorb_accu1+y_absorb_accu2...
-                                );
-                else
-                    fprintf(fID, '#%16.10f%16.10f%16.10f%16.10f%16.10f%16.10f\n', ...
-                                t*dt, ...
-                                nd1, nd2, ...
-                                KE, PE, KE+PE ...
-                                );
-                end
+                fprintf(fID, '#%16.10f%16.10f%16.10f%16.10f%16.10f%16.10f\n', ...
+                            t*dt, ...
+                            nd1, nd2, ...
+                            KE, PE, KE+PE ...
+                            );
             end
             % plot
             if enable_plot == true
-                if enable_adiab == true
-                    subplot(2,2,1);
-                    contour(y0,x0,abs(psiad(:,:,1)).^2,[psi_max/100:psi_max/100:psi_max]);
-                    title('Real space -- Pop Adiab 1');
+                subplot(2,2,1);
+                contour(y0,x0,abs(psi(:,:,1)).^2,[psi_max/100:psi_max/100:psi_max]);
+                title('Real space -- Pop Diab 1');
 
-                    subplot(2,2,2);
-                    contour(y0,x0,abs(psiad(:,:,2)).^2,[psi_max/100:psi_max/100:psi_max]);
-                    title('Real space -- Pop Adiab 2');
+                subplot(2,2,2);
+                contour(y0,x0,abs(psi(:,:,2)).^2,[psi_max/100:psi_max/100:psi_max]);
+                title('Real space -- Pop Diab 2');
 
-                    subplot(2,2,3);
-                    contour(ky0,kx0,abs(psiad_k(:,:,1)).^2,[psi_k_max/100:psi_k_max/100:psi_k_max]);
-                    title('Mom space -- Pop Adiab 1');
+                subplot(2,2,3);
+                contour(ky0,kx0,abs(psi_k(:,:,1)).^2,[psi_k_max/100:psi_k_max/100:psi_k_max]);
+                title('Mom space -- Pop Diab 1');
 
-                    subplot(2,2,4);
-                    contour(ky0,kx0,abs(psiad_k(:,:,2)).^2,[psi_k_max/100:psi_k_max/100:psi_k_max]); 
-                    title('Mom space -- Pop Adiab 2');
-                else
-                    subplot(2,2,1);
-                    contour(y0,x0,abs(psi(:,:,1)).^2,[psi_max/100:psi_max/100:psi_max]);
-                    title('Real space -- Pop Diab 1');
+                subplot(2,2,4);
+                contour(ky0,kx0,abs(psi_k(:,:,2)).^2,[psi_k_max/100:psi_k_max/100:psi_k_max]); 
+                title('Mom space -- Pop Diab 2');
 
-                    subplot(2,2,2);
-                    contour(y0,x0,abs(psi(:,:,2)).^2,[psi_max/100:psi_max/100:psi_max]);
-                    title('Real space -- Pop Diab 2');
-
-                    subplot(2,2,3);
-                    contour(ky0,kx0,abs(psi_k(:,:,1)).^2,[psi_k_max/100:psi_k_max/100:psi_k_max]);
-                    title('Mom space -- Pop Diab 1');
-
-                    subplot(2,2,4);
-                    contour(ky0,kx0,abs(psi_k(:,:,2)).^2,[psi_k_max/100:psi_k_max/100:psi_k_max]); 
-                    title('Mom space -- Pop Diab 2');
-                end
                 drawnow;
+            end
+            % check ending
+            if enable_abc == true
+                threash = 0.999;
+                if x_absorb_accu1+x_absorb_accu2+y_absorb_accu1+y_absorb_accu2 > threash
+                    fprintf('# %.3f pop has been absorbed, ending\n', threash);
+                    break;
+                end
             end
         end
     end

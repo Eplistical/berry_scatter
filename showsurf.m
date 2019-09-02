@@ -14,10 +14,10 @@ function showsurf()
         cal_H12 = @(x,y) 0.02 * sin(0.5 * pi * (erf(3 * x) + 1)) * exp(1i * param_W * y);
     else
         fprintf('# conner potential\n');
-        param_C = 0.1;
-        param_W = 0.5;
-        cal_H11 = @(x,y) tanh(x-5) - tanh(x+5) + tanh(y) + 3; % + 0.1 * 5^2 / ((x-y)^2 + 5^2);
-        cal_H22 = @(x,y) tanh(y-5) - tanh(y+5) + tanh(x) + 3; % + 0.1 * 5^2 / ((x-y)^2 + 5^2);
+        param_C = 0.15;
+        param_W = 1.0;
+        cal_H11 = @(x,y) tanh(x-8) - tanh(x+2) + tanh(y-3) + 3; % + 0.1 * 5^2 / ((x-y)^2 + 5^2);
+        cal_H22 = @(x,y) tanh(y-8) - tanh(y+2) + tanh(x-3) + 3; % + 0.1 * 5^2 / ((x-y)^2 + 5^2);
         cal_H12 = @(x,y) param_C * exp(1i * param_W * sqrt(x^2 + y^2));
     end
 
