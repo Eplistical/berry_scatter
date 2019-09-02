@@ -15,10 +15,10 @@ function exact_2d(r, k, init_s, fID)
 
     N = 2;
     L = 24; % 32;
-    M = 192; % 384; 
+    M = 216; % 384; 
 
     dt = 0.2;
-    Nstep = 50000; 
+    Nstep = 100000; 
     output_step = 500;
     mass = 1000.0;
 
@@ -37,15 +37,15 @@ function exact_2d(r, k, init_s, fID)
     else
         fprintf('# conner potential\n');
         param_C = 0.15;
-        param_W = 0.0;
-        %{
+        param_W = 1.0;
         cal_H11 = @(x,y) tanh(x-5) - tanh(x+5) + tanh(y) + 3; % + 0.1 * 5^2 / ((x-y)^2 + 5^2);
         cal_H22 = @(x,y) tanh(y-5) - tanh(y+5) + tanh(x) + 3; % + 0.1 * 5^2 / ((x-y)^2 + 5^2);
         cal_H12 = @(x,y) param_C * exp(1i * param_W * sqrt(x^2 + y^2));
-        %}
+        %{
         cal_H11 = @(x,y) tanh(x-8) - tanh(x+2) + tanh(y-3) + 3; % + 0.1 * 5^2 / ((x-y)^2 + 5^2);
         cal_H22 = @(x,y) tanh(y-8) - tanh(y+2) + tanh(x-3) + 3; % + 0.1 * 5^2 / ((x-y)^2 + 5^2);
         cal_H12 = @(x,y) param_C * exp(1i * param_W * sqrt(x^2 + y^2));
+        %}
     end
     % grids
     x0 = linspace(-L/2, L/2, M)';
