@@ -17,7 +17,7 @@ namespace {
     using std::vector;
     using std::complex;
 
-    double param_A = 0.02;
+    double param_A = 0.10;
     double param_B = 3.0;
     double param_W = 0.0;
 
