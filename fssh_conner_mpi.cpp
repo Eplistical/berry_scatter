@@ -15,7 +15,7 @@
 #include "boost/program_options.hpp"
 
 #include "2d_fssh_rescaling.hpp"
-#include "2d_flat_potential.hpp"
+#include "2d_conner_potential.hpp"
 
 enum {
     HOP_UP,
@@ -34,17 +34,15 @@ const complex<double> zI(0.0, 1.0);
 vector<double> potential_params;
 
 const double mass = 1000.0;
-double init_x = -3.0;
+double init_x = -9.0;
 double sigma_x = 0.5; 
-double init_px = 20.0;
+double init_px = 18.0;
 double sigma_px = 1.0; 
 double init_y = 0.0;
 double sigma_y = 0.5; 
 double init_py = 0.0;
 double sigma_py = 1.0; 
 double init_s = 0.0;
-double xwall_left = -10.0;
-double xwall_right = 10.0;
 int Nstep = 1000000;
 double dt = 0.1;
 int output_step = 100;
@@ -73,8 +71,6 @@ inline bool argparse(int argc, char** argv)
         ("init_py", po::value<double>(&init_py), "potential para init_py")
         ("sigma_py", po::value<double>(&sigma_py), "init sigma py")
         ("init_s", po::value<double>(&init_s), "init surface")
-        ("xwall_left", po::value<double>(&xwall_left), "wall on x direction to check end")
-        ("xwall_right", po::value<double>(&xwall_right), "wall on x direction to check end")
         ("potential_params", po::value< vector<double> >(&potential_params)->multitoken(), "potential_params vector")
         ("Ntraj", po::value<int>(&Ntraj), "# traj")
         ("Nstep", po::value<int>(&Nstep), "# step")
@@ -104,12 +100,7 @@ void init_state(state_t& state) {
     // state = x, y, vx, vy, c0, c1, s
     state[0].real(randomer::normal(init_x, sigma_x)); 
     state[1].real(randomer::normal(init_y, sigma_y)); 
-
     state[2].real(randomer::normal(init_px, sigma_px) / mass); 
-    while (state[2].real() <= 0.0) {
-        state[2].real(randomer::normal(init_px, sigma_px) / mass); 
-    }
-
     state[3].real(randomer::normal(init_py, sigma_py) / mass); 
     state[4].real(sqrt(1.0 - init_s));
     state[5].real(sqrt(init_s));
@@ -175,9 +166,13 @@ int hopper(state_t& state) {
 }
 
 bool check_end(const state_t& state) {
-    double x = state[0].real();
-    double vx = state[2].real();
-    return ((x > xwall_right and vx > 0.0) or (x < xwall_left and vx < 0.0));
+    const double x = state[0].real();
+    const double y = state[1].real();
+    const double vx = state[2].real();
+    const double vy = state[3].real();
+    if (x < -10.0 and vx < 0.0) return true;
+    if (y < -10.0 and vy < 0.0) return true;
+    return false;
 }
 
 void fssh() {
@@ -192,17 +187,13 @@ void fssh() {
         init_state(state[itraj]);
     }
     // statistics
-    double n0trans = 0.0, n0refl = 0.0, n1trans = 0.0, n1refl = 0.0;
-    double px0trans = 0.0, px0refl = 0.0, px1trans = 0.0, px1refl = 0.0;
-    double py0trans = 0.0, py0refl = 0.0, py1trans = 0.0, py1refl = 0.0;
+    double n0left = 0.0, n0bottom = 0.0, n1left = 0.0, n1bottom = 0.0;
     double KE = 0.0, PE = 0.0;
     double hopup = 0.0, hopdn = 0.0, hopfr = 0.0, hoprj = 0.0;
     vector<double> hop_count(my_Ntraj, 0.0);
     // recorders
     int Nrec = Nstep / output_step;
-    vector<double> n0trans_arr(Nrec), n0refl_arr(Nrec), n1trans_arr(Nrec), n1refl_arr(Nrec);
-    vector<double> px0trans_arr(Nrec), px0refl_arr(Nrec), px1trans_arr(Nrec), px1refl_arr(Nrec);
-    vector<double> py0trans_arr(Nrec), py0refl_arr(Nrec), py1trans_arr(Nrec), py1refl_arr(Nrec);
+    vector<double> n0left_arr(Nrec), n0bottom_arr(Nrec), n1left_arr(Nrec), n1bottom_arr(Nrec);
     vector<double> KE_arr(Nrec), PE_arr(Nrec);
     vector<double> hop_count_summary(50, 0.0);
     // main loop
@@ -238,64 +229,28 @@ void fssh() {
             // data analysis
             int irec = istep / output_step;
             // population
-            n0trans = n0refl = n1trans = n1refl = 0.0;
+            n0left = n0bottom = n1left = n1bottom = 0.0;
             for_each(state.begin(), state.end(), 
-                    [&n0trans, &n0refl, &n1trans, &n1refl](const state_t& st) { 
-                        int s = static_cast<int>(st[6].real());
-                        double vx = st[2].real();
+                    [&n0left, &n0bottom, &n1left, &n1bottom](const state_t& st) { 
+                        const int s = static_cast<int>(st[6].real());
+                        const double x = st[0].real();
+                        const double y = st[1].real();
                         if (s == 0) {
-                            (vx >= 0.0) ? n0trans += 1.0 : n0refl += 1.0;
+                            (y > x) ? n0left += 1.0 : n0bottom += 1.0;
                         }
                         else {
-                            (vx >= 0.0) ? n1trans += 1.0 : n1refl += 1.0;
+                            (y > x) ? n1left += 1.0 : n1bottom += 1.0;
                         }
                     });
-            n0trans_arr[irec] = n0trans;
-            n0refl_arr[irec] = n0refl;
-            n1trans_arr[irec] = n1trans;
-            n1refl_arr[irec] = n1refl;
-            // momentum
-            px0trans = px0refl = px1trans = px1refl = 0.0;
-            py0trans = py0refl = py1trans = py1refl = 0.0;
-            for_each(state.begin(), state.end(), 
-                    [&px0trans, &px0refl, &px1trans, &px1refl, &py0trans, &py0refl, &py1trans, &py1refl] (const state_t& st) {
-                        int s = static_cast<int>(st[6].real());
-                        double vx = st[2].real();
-                        if (s == 0) {
-                            if (vx >= 0.0) {
-                                px0trans += mass * st[2].real();
-                                py0trans += mass * st[3].real();
-                            }
-                            else {
-                                px0refl += mass * st[2].real();
-                                py0refl += mass * st[3].real();
-                            }
-                        }
-                        else {
-                            if (vx >= 0.0) {
-                                px1trans += mass * st[2].real();
-                                py1trans += mass * st[3].real();
-                            }
-                            else {
-                                px1refl += mass * st[2].real();
-                                py1refl += mass * st[3].real();
-                            }
-                        }
-                    }
-                    );
-            px0trans_arr[irec] = px0trans;
-            px0refl_arr[irec] = px0refl;
-            px1trans_arr[irec] = px1trans;
-            px1refl_arr[irec] = px1refl;
-            py0trans_arr[irec] = py0trans;
-            py0refl_arr[irec] = py0refl;
-            py1trans_arr[irec] = py1trans;
-            py1refl_arr[irec] = py1refl;
+            n0left_arr[irec] = n0left;
+            n0bottom_arr[irec] = n0bottom;
+            n1left_arr[irec] = n1left;
+            n1bottom_arr[irec] = n1bottom;
             // energy
             KE = PE = 0.0;
             for_each(state.begin(), state.end(), 
                     [&KE, &PE] (const state_t& st) {
-                        int s = static_cast<int>(st[6].real());
+                        const int s = static_cast<int>(st[6].real());
                         vector<double> eva;
                         matrixop::hdiag(cal_H(vector<double> { st[0].real(), st[1].real() }), eva);
                         KE += 0.5 * mass * pow(st[2].real(), 2) + 0.5 * mass * pow(st[3].real(), 2); 
@@ -308,20 +263,10 @@ void fssh() {
             bool end_flag = all_of(state.begin(), state.end(), check_end);
             if (end_flag == true) {
                 // fill the rest
-                fill(n0trans_arr.begin() + irec + 1, n0trans_arr.end(), n0trans);
-                fill(n0refl_arr.begin() + irec + 1, n0refl_arr.end(), n0refl);
-                fill(n1trans_arr.begin() + irec + 1, n1trans_arr.end(), n1trans);
-                fill(n1refl_arr.begin() + irec + 1, n1refl_arr.end(), n1refl);
-
-                fill(px0trans_arr.begin() + irec + 1, px0trans_arr.end(), px0trans);
-                fill(px0refl_arr.begin() + irec + 1, px0refl_arr.end(), px0refl);
-                fill(px1trans_arr.begin() + irec + 1, px1trans_arr.end(), px1trans);
-                fill(px1refl_arr.begin() + irec + 1, px1refl_arr.end(), px1refl);
-
-                fill(py0trans_arr.begin() + irec + 1, py0trans_arr.end(), py0trans);
-                fill(py0refl_arr.begin() + irec + 1, py0refl_arr.end(), py0refl);
-                fill(py1trans_arr.begin() + irec + 1, py1trans_arr.end(), py1trans);
-                fill(py1refl_arr.begin() + irec + 1, py1refl_arr.end(), py1refl);
+                fill(n0left_arr.begin() + irec + 1, n0left_arr.end(), n0left);
+                fill(n0bottom_arr.begin() + irec + 1, n0bottom_arr.end(), n0bottom);
+                fill(n1left_arr.begin() + irec + 1, n1left_arr.end(), n1left);
+                fill(n1bottom_arr.begin() + irec + 1, n1bottom_arr.end(), n1bottom);
 
                 fill(KE_arr.begin() + irec + 1, KE_arr.end(), KE);
                 fill(PE_arr.begin() + irec + 1, PE_arr.end(), PE);
@@ -338,9 +283,7 @@ void fssh() {
     for (int r = 1; r < MPIer::size; ++r) {
         if (MPIer::rank == r) {
             MPIer::send(0, 
-                    n0trans_arr, n0refl_arr, n1trans_arr, n1refl_arr, 
-                    px0trans_arr, px0refl_arr, px1trans_arr, px1refl_arr, 
-                    py0trans_arr, py0refl_arr, py1trans_arr, py1refl_arr, 
+                    n0left_arr, n0bottom_arr, n1left_arr, n1bottom_arr, 
                     KE_arr, PE_arr,
                     hopup, hopdn, hopfr, hoprj, hop_count_summary
                     );
@@ -348,20 +291,10 @@ void fssh() {
         else if (MPIer::master) {
             vector<double> buf;
 
-            MPIer::recv(r, buf); n0trans_arr += buf;
-            MPIer::recv(r, buf); n0refl_arr += buf;
-            MPIer::recv(r, buf); n1trans_arr += buf;
-            MPIer::recv(r, buf); n1refl_arr += buf;
-
-            MPIer::recv(r, buf); px0trans_arr += buf;
-            MPIer::recv(r, buf); px0refl_arr += buf;
-            MPIer::recv(r, buf); px1trans_arr += buf;
-            MPIer::recv(r, buf); px1refl_arr += buf;
-
-            MPIer::recv(r, buf); py0trans_arr += buf;
-            MPIer::recv(r, buf); py0refl_arr += buf;
-            MPIer::recv(r, buf); py1trans_arr += buf;
-            MPIer::recv(r, buf); py1refl_arr += buf;
+            MPIer::recv(r, buf); n0left_arr += buf;
+            MPIer::recv(r, buf); n0bottom_arr += buf;
+            MPIer::recv(r, buf); n1left_arr += buf;
+            MPIer::recv(r, buf); n1bottom_arr += buf;
 
             MPIer::recv(r, buf); KE_arr += buf;
             MPIer::recv(r, buf); PE_arr += buf;
@@ -386,44 +319,29 @@ void fssh() {
                 " sigma_x = ", sigma_x, " sigma_px = ", sigma_px, 
                 " init_y = ", init_y, " init_py = ", init_py, 
                 " sigma_y = ", sigma_y, " sigma_py = ", sigma_py, 
-                " init_s = ", init_s, " xwall_left = ", xwall_left, " xwall_right = ", xwall_right,
+                " init_s = ", init_s, 
                 " enable_hop = ", enable_hop, " rescaling_alg = ", rescaling_alg,
                 ""
                 );
-        ioer::tabout('#', "t", "n0trans", "n0refl", "n1trans", "n1refl", "px0trans", "py0trans", "px0refl", "py0refl", "px1trans", "py1trans", "px1refl", "py1refl", "etot");
+        ioer::tabout('#', "t", "n0left", "n0bottom", "n1left", "n1bottom", "Etot");
         for (int irec = 0; irec < Nrec; ++irec) {
-            n0trans = n0trans_arr[irec];
-            n0refl = n0refl_arr[irec];
-            n1trans = n1trans_arr[irec];
-            n1refl = n1refl_arr[irec];
-
-            px0trans = px0trans_arr[irec];
-            px0refl = px0refl_arr[irec];
-            px1trans = px1trans_arr[irec];
-            px1refl = px1refl_arr[irec];
-
-            py0trans = py0trans_arr[irec];
-            py0refl = py0refl_arr[irec];
-            py1trans = py1trans_arr[irec];
-            py1refl = py1refl_arr[irec];
+            n0left = n0left_arr[irec];
+            n0bottom = n0bottom_arr[irec];
+            n1left = n1left_arr[irec];
+            n1bottom = n1bottom_arr[irec];
 
             KE = KE_arr[irec];
             PE = PE_arr[irec];
 
-            if (n0trans > 0.0) { px0trans /= n0trans; py0trans /= n0trans; }
-            if (n0refl > 0.0) { px0refl /= n0refl; py0refl /= n0refl; }
-            if (n1trans > 0.0) { px1trans /= n1trans; py1trans /= n1trans; }
-            if (n1refl > 0.0) { px1refl /= n1refl; py1refl /= n1refl; }
+            n0left /= Ntraj;
+            n0bottom /= Ntraj;
+            n1left /= Ntraj;
+            n1bottom /= Ntraj;
 
-            n0trans /= Ntraj;
-            n0refl /= Ntraj;
-            n1trans /= Ntraj;
-            n1refl /= Ntraj;
-
-            ioer::tabout('#', irec * output_step * dt, n0trans, n0refl, n1trans, n1refl, px0trans, py0trans, px0refl, py0refl, px1trans, py1trans, px1refl, py1refl, (KE + PE) / Ntraj);
+            ioer::tabout('#', irec * output_step * dt, n0left, n0bottom, n1left, n1bottom, (KE + PE) / Ntraj);
         }
         // final results
-        ioer::tabout(init_px, n0trans, n0refl, n1trans, n1refl, px0trans, py0trans, px0refl, py0refl, px1trans, py1trans, px1refl, py1refl);
+        ioer::tabout(n0left, n0bottom, n1left, n1bottom);
         // hop info
         ioer::info("# hopup = ", hopup, " hopdn = ", hopdn, " hopfr = ", hopfr, " hopfr_rate = ", hopfr / (hopup + hopdn + hopfr));
         ioer::info("# hop count: ", hop_count_summary);
@@ -431,23 +349,10 @@ void fssh() {
     MPIer::barrier();
 }
 
-void check_surf() {
-    for (double x = xwall_left - 1; x < xwall_right + 1; x += 0.01) {
-        cal_info_nume(vector<double> {x, 0.0}, Fx, Fy, dcx, dcy, eva, lastevt);
-        ioer::tabout(x, eva, 
-                dcx[0+1*2].real(), dcx[0+1*2].imag(), abs(dcx[0+1*2]), 
-                dcy[0+1*2].real(), dcy[0+1*2].imag(), abs(dcy[0+1*2])
-                );
-    }
-}
-
 int main(int argc, char** argv) {
     MPIer::setup();
     if (argc < 2) {
         if (MPIer::master) ioer::info("use --help for detailed info");
-    }
-    else if (string(argv[1]) == "check") {
-        if (MPIer::master) check_surf();
     }
     else {
         if (argparse(argc, argv) == false) {
