@@ -33,8 +33,9 @@ const complex<double> zI(0.0, 1.0);
 
 vector<double> potential_params;
 
+const double kT = 1e-3;
 const double mass = 1000.0;
-double init_x = -9.0;
+double init_x = -12.0;
 double sigma_x = 0.5; 
 double init_px = 18.0;
 double sigma_px = 1.0; 
@@ -46,16 +47,21 @@ double init_s = 0.0;
 int Nstep = 1000000;
 double dt = 0.1;
 int output_step = 100;
-int Ntraj = 5000;
+int Ntraj = 10000;
 int seed = 0;
 bool enable_hop = true;
+bool enable_fric = false;
+bool enable_berry = true;
 string rescaling_alg = "x";
+double gamma0 = 0.01;
 
 vector< complex<double> > lastevt;
 vector<double> eva(2);
 vector< complex<double> > Fx(4), Fy(4);
 vector< complex<double> > dcx(4), dcy(4);
 vector< complex<double> > dx_dcx(4), dy_dcy(4);
+
+double Fx_random, Fy_random;
 
 inline bool argparse(int argc, char** argv) 
 {
@@ -79,6 +85,8 @@ inline bool argparse(int argc, char** argv)
         ("rescaling_alg", po::value<string>(&rescaling_alg), "rescaling algorithm")
         ("seed", po::value<int>(&seed), "random seed")
         ("enable_hop", po::value<bool>(&enable_hop), "enable hopping")
+        ("enable_fric", po::value<bool>(&enable_fric), "enable friction")
+        ("enable_berry", po::value<bool>(&enable_berry), "enable berry force")
         ;
     po::variables_map vm; 
     po::store(parse_command_line(argc, argv, desc, po::command_line_style::unix_style ^ po::command_line_style::allow_short), vm);
@@ -107,6 +115,17 @@ void init_state(state_t& state) {
     state[6].real((randomer::rand() < init_s) ? 1.0 : 0.0);
 }
 
+double cal_fric_gamma(const state_t& state) {
+    const double x = state[0].real();
+    const double y = state[1].real();
+    if (x < -9.0 or y < -9.0) {
+        return gamma0;
+    } 
+    else {
+        return 0.0;
+    }
+}
+
 void sys(const state_t& state, state_t& state_dot, const double /* t */) {
     // state = x, v, c0, c1, s
     vector<double> r { state[0].real(), state[1].real() };
@@ -114,14 +133,25 @@ void sys(const state_t& state, state_t& state_dot, const double /* t */) {
     vector< complex<double> > c { state[4], state[5] };
     int s = static_cast<int>(state[6].real());
     // extra Berry Force
-    double Fx_berry, Fy_berry;
-    Fx_berry = 2 * (dcx[s+(1-s)*2] * (v[0] * dcx[1-s+s*2] + v[1] * dcy[1-s+s*2])).imag();
-    Fy_berry = 2 * (dcy[s+(1-s)*2] * (v[0] * dcx[1-s+s*2] + v[1] * dcy[1-s+s*2])).imag();
+    double Fx_berry = 0.0, Fy_berry = 0.0;
+    if (enable_berry) {
+        Fx_berry = 2 * (dcx[s+(1-s)*2] * (v[0] * dcx[1-s+s*2] + v[1] * dcy[1-s+s*2])).imag();
+        Fy_berry = 2 * (dcy[s+(1-s)*2] * (v[0] * dcx[1-s+s*2] + v[1] * dcy[1-s+s*2])).imag();
+    }
+    // extra fric force, ASSUMING F_random HAS BEEN INITIALIZED OUTSIDE
+    double Fx_fric = 0.0, Fy_fric = 0.0;
+    if (enable_fric) {
+        const double gamma = cal_fric_gamma(state);
+        if (gamma > 0.0) {
+            Fx_fric = -gamma * mass * v[0] + Fx_random;
+            Fy_fric = -gamma * mass * v[1] + Fy_random;
+        }
+    }
     // state_dot
     state_dot[0] = v[0];
     state_dot[1] = v[1];
-    state_dot[2] = (Fx[s+s*2] + Fx_berry) / mass;
-    state_dot[3] = (Fy[s+s*2] + Fy_berry) / mass;
+    state_dot[2] = (Fx[s+s*2] + Fx_berry + Fx_fric) / mass;
+    state_dot[3] = (Fy[s+s*2] + Fy_berry + Fy_fric) / mass;
     state_dot[4] = -zI * c[0] * eva[0] - c[1] * (v[0] * dcx[0+1*2] + v[1] * dcy[0+1*2]) - c[0] * (v[0] * dcx[0+0*2] + v[1] * dcy[0+0*2]);
     state_dot[5] = -zI * c[1] * eva[1] - c[0] * (v[0] * dcx[1+0*2] + v[1] * dcy[1+0*2]) - c[1] * (v[0] * dcx[1+1*2] + v[1] * dcy[1+1*2]);
     state_dot[6] = matrixop::ZEROZ;
@@ -166,12 +196,14 @@ int hopper(state_t& state) {
 }
 
 bool check_end(const state_t& state) {
+    /*
     const double x = state[0].real();
     const double y = state[1].real();
     const double vx = state[2].real();
     const double vy = state[3].real();
     if (x < -10.0 and vx < 0.0) return true;
     if (y < -10.0 and vy < 0.0) return true;
+    */
     return false;
 }
 
@@ -220,6 +252,11 @@ void fssh() {
                     }
                 }
                 // propagate
+                if (enable_fric) {
+                    const double gamma = cal_fric_gamma(state[itraj]);
+                    Fx_random = randomer::normal(0.0, sqrt(2.0 * gamma * kT / dt));
+                    Fy_random = randomer::normal(0.0, sqrt(2.0 * gamma * kT / dt));
+                }
                 rk4.do_step(sys, state[itraj], istep * dt, dt);
                 // save last evt
                 lastevt_save[itraj] = move(lastevt);
@@ -319,8 +356,10 @@ void fssh() {
                 " sigma_x = ", sigma_x, " sigma_px = ", sigma_px, 
                 " init_y = ", init_y, " init_py = ", init_py, 
                 " sigma_y = ", sigma_y, " sigma_py = ", sigma_py, 
-                " init_s = ", init_s, 
-                " enable_hop = ", enable_hop, " rescaling_alg = ", rescaling_alg,
+                " init_s = ", init_s, " gamma0 = ", gamma0, 
+                " enable_hop = ", enable_hop, 
+                " enable_fric = ", enable_fric, 
+                " rescaling_alg = ", rescaling_alg,
                 ""
                 );
         ioer::tabout('#', "t", "n0left", "n0bottom", "n1left", "n1bottom", "Etot");
