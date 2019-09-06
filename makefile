@@ -4,12 +4,12 @@ OPT = -O2
 LIBS += -lboost_program_options -lfftw3 -lopenblas -llapack -lpthread -lgfortran 
 SRC = .
 
-all : exact  fssh
+all : exact  fssh_conner_mpi
 
 exact: $(SRC)/exact.cpp 
 	$(CXX) $(OPT) $< -o $@ $(LIBS)
 
-fssh: $(SRC)/fssh_conner_mpi.cpp 
+fssh_conner_mpi: $(SRC)/fssh_conner_mpi.cpp 
 	$(MPICXX) $(OPT) $< -o $@ $(LIBS)
 
 check: $(SRC)/check_potential.cpp 
